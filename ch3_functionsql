@@ -1,0 +1,261 @@
+------------------###3장. 함수###---------------------------
+
+---- 1.3 단일행 함수
+--- 1) 문자함수
+-- 
+SELECT last_name, LOWER(last_name), INITCAP(last_name), UPPER(LAST_NAME)
+FROM employees
+WHERE LOWER(last_name) = 'austin';
+
+-- 2. 문자열조작 실전문제
+-- 문제:  employees 테이블에서 job_id가 it_prog인 사원의 이름과 급여 출력
+-- 비교하기 위한 값은 소문자로 입력
+-- 이름은 앞 3문자까지만 출력하고 나머지는 *로 출력. 열별칭 name(RPAD: 오른쪽에 남은 부분을 주어진 문자로 채움)
+-- 급여는 전체 10자리로 출력, 나머지 자리는 *로 출력. 열별칭 salary
+
+SELECT RPAD(SUBSTR(first_name, 1,3), LENGTH(first_name), '*') AS name, --substr: 문자열을 주어진 만큼만 출력 
+            LPAD(salary, 10, '*') AS salary -- 정의된 문장의 왼쪽 나머지 공간을 지정한 문자로 채움(빈공간)
+FROM employees
+WHERE LOWER(job_id) = 'it_prog';
+
+-- 3. 정규표현식 실전문제
+-- employees테이블에서 PHONE_NUMBER열에서 XXX.XXX.XXXX형식 전화번호 출력
+SELECT first_name, phone_number
+FROM employees
+WHERE REGEXP_LIKE(phone_number, '^[0-9]{3}.[0-9]{3}.[0-9]{4}$');
+
+SELECT first_name, phone_number
+FROM employees
+WHERE REGEXP_LIKE(phone_number, '^[[:digit:]]{3}.[[:digit:]]{3}.[[:digit:]]{4}$');
+
+-- XXX.XXXX.XXXX형식으로 출력하되 전화번호 맨 뒷 4자리를 *로 마스킹해서 출력하라
+-- 혹은 REGEXP_REPLACE(phone_number, [0-9]{4}$, '****')
+SELECT first_name, RPAD(SUBSTR(phone_number, 1, 8), LENGTH(phone_number), '*') AS phone_num, 
+            REGEXP_SUBSTR(phone_number, '[[:digit:]]{4}$') AS phone_num2
+FROM employees
+WHERE REGEXP_LIKE(phone_number, '^[[:digit:]]{3}.[[:digit:]]{3}.[[:digit:]]{4}$');
+
+
+-- 4. 숫자함수 실전문제
+SELECT ROUND(45.923, 2), ROUND(45.923, 0), TRUNC(45.923, 2), TRUNC(45.923, -1), TRUNC(45.923, 0) as 일의자리절삭 --round는 반올림, trunc는 절삭
+FROM DUAL;
+-- 3번째 자리에서 반올림, 1번째니까 첫번째 자리에서 반올림, 2번째 자리에서 절삭, 일의자리에서 절삭
+-- 45.92, 46, 45.92, 40, 45
+
+-- 5. 날짜 함수 실전문제
+-- 1) 날짜의 연산: employees 테이블에서 직원들이 일한 주 수를 계산하시오
+SELECT first_name, ROUND((SYSDATE - hire_date)/7, 0) AS "Weeks"
+FROM employees
+WHERE department_id = 60;
+
+-- 2) 날짜함수
+-- 근무한 개월 수 출력
+SELECT first_name, SYSDATE, hire_date, ROUND(MONTHS_BETWEEN(SYSDATE, hire_date), 0) AS workmonth
+FROM employees
+WHERE first_name = 'Diana';
+
+-- DIANA사원의 입사일과 입사 후 100개월 되는 날짜 출력
+SELECT first_name, hire_date, ADD_MONTHS(hire_date, 100) AS one_hundred_after
+FROM employees
+WHERE first_name = 'Diana';
+
+SELECT first_name, hire_date, ADD_MONTHS(hire_date, 100) AS one_hundred_after
+FROM employees
+WHERE first_name = 'Diana';
+
+-- 오늘에서 다음 월요일
+SELECT SYSDATE, NEXT_DAY(SYSDATE, '월')
+FROM dual;
+
+-- last_day: 월의 마지막날짜
+SELECT SYSDATE, LAST_DAY(SYSDATE)
+FROM dual;
+
+-- ROUND, TRUNC: Month, Year 로 반올림 혹은 절삭 가능, 대소문자를 구분하지 않는다
+SELECT SYSDATE, ROUND(SYSDATE, 'Month'), TRUNC(SYSDATE, 'Month')
+FROM dual;
+
+SELECT TO_DATE('22/03/03'), ROUND(TO_DATE('22/03/03'), 'Month'), TRUNC(TO_DATE('22/03/03'), 'Year')
+FROM dual;
+
+
+--- 6. 변환함수
+-- 날짜->문자
+SELECT first_name, TO_CHAR(hire_date, 'MM/YY')
+FROM employees
+WHERE first_name = 'Steven';
+
+SELECT first_name, TO_CHAR(hire_date, 'YYYY"년" MM"월" DD"일"') AS HIREDATE
+FROM employees;
+
+SELECT first_name, TO_CHAR(hire_date, 'fmDdspth "of" MONTH YYYY fmHH:MI:SS AM',
+                                                                    'NLS_DATE_LANGUAGE = english') AS HIREDATE
+FROM employees;
+
+-- first_name = 'David'인 직원의 임금을 출력
+SELECT first_name, last_name, TO_CHAR(salary, '$999,999')
+FROM employees
+WHERE first_name = 'David';
+
+-- TO_NUMBER: 문자 스트링을 숫자형식으로 변환
+SELECT TO_NUMBER('$5,500.00', '$99,999.99') - 4000
+FROM dual;
+
+-- TO_DATE: 문자 스트링을 날짜형식으로 변환
+-- 2003년 06월 17일에 입사한 사원의 이름과 입사일을 출력
+SELECT first_name, hire_date
+FROM employees
+WHERE hire_date = TO_DATE('2003/06/17', 'YYYY/MM/DD');
+
+SELECT first_name, hire_date
+FROM employees
+WHERE hire_date = TO_DATE('2003년 06월 17일', 'YYYY"년" MM"월" DD"일"');
+
+-- 6.7 NULL치환함수
+-- NVL(null을 포함할 수 있는 값, 그 값이 NULL인 경우 넣을 값)
+-- commission을 받는 사람들을 포함한 
+SELECT first_name,
+            salary + salary*NVL(commission_pct, 0) AS ann_sal
+FROM employees;
+
+SELECT first_name,	
+            NVL2(commission_pct,	salary+(salary*commission_pct),	salary)	ann_sal
+FROM	employees;
+
+-- 6.8 기타 변환함수
+-- 1) LNNVL함수: 표현식의 결과가 false또는 unknown이면 true를 반환
+-- coalesce함수: null이 아닌 최초의 표현식을 반환. 모든 표현식이 null이면 null을 반환
+
+-- 문제: 보너스가 650달러보다 적은 사원들에게 상품권을 지급하려 한다. 해당 사원들의 이름과 보너스를 출력하세요. 보너스는 salary*commission_pct
+SELECT first_name, COALESCE(salary*commission_pct, 0) AS ann_sal -- 커미션받는사람은 보너스의 값이, 아니면 받지않으니까 0
+FROM employees
+WHERE LNNVL(salary*commission_pct >= 650); -- false또는 unknown이면 true를 반환
+
+
+-- 2) DECODE 함수: if-then-else구문과 유사 / 컬럼 혹은 표현식, 경우의 수. 결과
+--                                                                                            경우의 수2, 결과2
+--                                                                                                             ,디폴트값
+                                                                                            
+SELECT job_id, salary,
+            DECODE(job_id, 'IT_PROG', salary*1.10,
+                                        'FI_MER', salary*1.15,
+                                        'FI_ACCOUNT', salary*1.20,
+                                                                    salary)
+            AS revised_salary
+FROM employees;
+
+-- CASE문: CASE ~ WHEN ~ THEN
+SELECT job_id, salary,
+    CASE job_id WHEN 'IT_PROG'  THEN salary*1.10
+                        WHEN 'FI_MGR'   THEN salary*1.15
+                        WHEN 'FI_ACCOUNT'   THEN salary*1.20
+                ELSE salary
+    END AS REVISED_SALARY
+FROM employees;
+
+-- 8. 연습문제
+-- 1. 이메일에 lee를 포함하는 사원의 모든 정보를 출력하세요.
+SELECT *
+FROM employees
+WHERE REGEXP_LIKE(LOWER(email), 'lee');
+-- 답지 답: 결과는 같게 나옴
+SELECT * FROM employees
+WHERE LOWER(email) LIKE '%lee%';
+
+-- 2. 매니저 아이디가 103인 사원들의 이름과 급여, 직무 아이디를 출력하세요.
+SELECT first_name, salary, job_id
+FROM employees
+WHERE manager_id = 103;
+
+-- 3. 80번 부서에 근무하면서 직무가 SA_MAN인 사원의 정보와 20번 부서에 근무하면서 매니저 아이디가 100인사원의 정보를 출력하세요. 쿼리문 하나로 출력해야 합니다.
+SELECT *
+FROM employees
+WHERE job_id = 'SA_MAN'
+UNION
+SELECT *
+FROM employees
+WHERE department_id = 20 and manager_id = 100;
+
+
+-- 4. 모든 사원의 전화번호를 ###-###-#### 형식으로 출력하세요
+SELECT TO_CHAR(phone_number, '999"-"999"-"999') --몰겠음
+FROM employees
+WHERE REGEXP_LIKE(phone_number, '^[0-9]{3}.[0-9]{3}.[0-9]{4}$');
+
+--답 충격
+SELECT REPLACE(phone_number, '.', '-') AS 전화번호
+FROM employees;
+
+
+-- 5. 직무가 IT_PROG인 사원들 중에서 급여가 5000 이상인 사원들의 이름(Full Name), 급여 지급액, 입사일(2005-02-15형식), 근무한 일수를 출력하세요. 이름순으로 정렬하며, 이름은 최대 20자리, 남는 자리는 *로 채우고 급여 지급액은 소수점 2자리를 포함한 최대 8자리, $표시, 남는 자리는 0으로 채워 출력하세요.
+SELECT RPAD(first_name ||' '|| last_name, 20, '*') AS FULL_NAME, 
+                TO_CHAR(COALESCE(salary+salary*commission_pct, salary), '$099,999.00') AS salary, -- 이거 어려움!
+                TO_CHAR(hire_date, 'YYYY-MM-DD') AS hire_date, 
+                ROUND((SYSDATE - hire_date)) AS work_day
+FROM employees
+WHERE job_id = 'IT_PROG' AND salary >= 5000
+ORDER BY FULL_NAME;
+
+-- 6. 30번부서 사원의 이름, 급여, 입사일, 현재까지 근무개월 수. 이름은 full name 최대 20 남는공간*, 급여는 커미션있는사람 커미션붙여서, 소수점2자리 총 8자리 남는공간0, 
+
+SELECT RPAD(first_name ||' '|| last_name, 20, '*') AS FULL_NAME, 
+                TO_CHAR(COALESCE(salary+salary*commission_pct, salary), '$999,999.00') AS salary, -- 이거 어려움!
+                TO_CHAR(hire_date, 'YYYY"년" MM"월" DD"일"') AS hire_date,
+                TRUNC(MONTHS_BETWEEN(SYSDATE, hire_date)) AS month
+FROM employees
+WHERE department_id = 30
+ORDER BY salary DESC;
+
+-- 7. 80번부서 근무, salary가 10000보다 큰 사원들의 이름과 급여지급액 출력. 이름 full name 17자리. 급여 소수점2자리포함7자리 남은자리는 0. 금액 앞에 $붙이고 급여순 정렬
+SELECT RPAD(first_name ||' '|| last_name, 17, '*') AS 이름, 
+                TO_CHAR(COALESCE(salary+salary*commission_pct, salary), '$99,999.00') AS 급여 -- 이거 어려움!
+FROM employees
+WHERE department_id = 80 AND salary > 10000
+ORDER BY 급여 DESC;
+
+--8. 60번부서 사원의 이름과 현재 일자를 기준으로 현재까지 근무년차를 계산해 출력. 이름, 근무년차(= 근무개월수/12), 단 5년차씩으로 계산
+SELECT first_name AS 이름,
+                DECODE(TRUNC(TRUNC(MONTHS_BETWEEN(SYSDATE, hire_date)/12)/5),
+                                1, '5년차',
+                                2, '10년차',
+                                3, '15년차',
+                                '기타')
+FROM employees
+WHERE department_id = 60;
+
+--9. Lex가 입사한 지 1000일째 되는 날은?
+SELECT hire_date + 1000 -- 단순 날짜를 더하고 싶은거면 +기호 사용
+FROM employees
+WHERE first_name = 'Lex';
+
+--10. 5월에 입사한 사원의 이름과 입사일을 출력
+SELECT first_name, hire_date
+FROM employees
+WHERE TO_CHAR(hire_date, 'MM') = '05';
+
+--11.
+SELECT first_name, salary,
+            TO_CHAR(hire_date, 'RRRR"년 입사"') AS year, --입사년도
+            TO_CHAR(hire_date, 'day') AS day, -- 요일정보
+            CASE WHEN TO_NUMBER(TO_CHAR(hire_date, 'YY')) >= 10
+                        THEN TO_CHAR(salary*1.10, '$999,999')
+                     WHEN TO_NUMBER(TO_CHAR(hire_date, 'YY')) >= 5
+                        THEN TO_CHAR(salary*1.05, '$999,999')
+                        ELSE TO_CHAR(salary, '$999,999')
+            END AS "INCREASING SALARY"
+FROM employees;
+
+--12. 입사년도가 2010, 2005인 경우만 임금을 인상해주기 때문에 decode가능
+
+SELECT first_name, salary, TO_CHAR(hire_date, 'RRRR"년 입사"') AS year,
+                DECODE(TO_CHAR(hire_date, 'RR'), '10', salary*1.10,
+                                                                    '05', salary*1.05,
+                                                                    salary)
+                AS "INCREASING_SALARY2"
+FROM employees;
+
+--13. 위치목록 중 주(state) 열의 값이 null이라면 국가아이디를 출력하기
+
+SELECT country_id, 
+            NVL(state_province, country_id) AS state
+FROM locations;

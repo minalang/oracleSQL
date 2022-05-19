@@ -1,0 +1,150 @@
+------ 4장: 그룹함수를 이용한 데이터 집계 -------
+--- 4. Grouping Sets: UNION ALL과 같은 기능, 단 하나의 SELECT문으로 해결가능
+SELECT department_id, job_id, ROUND(AVG(salary), 2) AS 평균임금
+FROM employees
+GROUP BY GROUPING SETS(department_id, job_id)
+ORDER BY department_id, job_id;
+
+-- UNION ALL이용
+SELECT TO_CHAR(department_id), ROUND(AVG(salary), 2)
+    FROM employees
+    GROUP BY department_id
+UNION ALL
+SELECT job_id, ROUND(AVG(salary), 2)
+    FROM employees
+    GROUP BY job_id
+ORDER BY 1;
+-- 하나의 열에 department_id와 job_id 정보 함께 들어가있다.
+
+-- 부서별, 직무별 평균 급여와 직무별 매니저별 평균급여
+SELECT department_id, job_id, manager_id, ROUND(AVG(salary), 2) AS avg_sal --round, 세번째자리에서 반올림
+FROM employees
+GROUP BY GROUPING SETS((department_id, job_id), (job_id, manager_id))
+ORDER BY department_id, job_id, manager_id;
+
+---5. ROLL UP, CUBE: 어디까지 집계하는지가 다르다
+--- rollup: 레벨별 집계, 행에 대한 집계까지
+SELECT department_id, job_id, ROUND(AVG(salary), 2), COUNT(*)
+from employees
+GROUP BY ROLLUP(department_id, job_id)
+ORDER BY department_id, job_id;
+
+-- cube: 행과 더불어 모든 열에 대한 집계를 해줌 심지어 null도
+SELECT department_id, job_id, ROUND(AVG(salary), 2), COUNT(*)
+FROM employees
+GROUP BY CUBE(department_id, job_id)
+ORDER BY department_id, job_id;
+
+--- 7. grouping_id
+-- 소계와 합계를 식별
+SELECT 
+            DECODE(GROUPING_ID(department_id, job_id),
+                            2, '소계', 3, '합계', 
+                            TO_CHAR(department_id)) AS 부서번호,
+            DECODE(GROUPING_ID(department_id, job_id),
+                            1, '소계', 3, '합계', 
+                            job_id) AS 직무,
+            GROUPING_ID(department_id, job_id) AS GID, -- grouping_id가 둘 다 null아니면0, 직무가 null이면 1, 부서번호가 null이면2, 둘 다 null이면 3 
+            ROUND(AVG(salary), 2) AS 평균,
+            COUNT(*) AS 사원의수
+FROM employees
+GROUP BY CUBE(department_id, job_id)
+ORDER BY 부서번호, 직무;
+
+-- 8. 연습문제
+
+-- 1. 직무별 급여 평균을 출력하세요.
+SELECT job_id, ROUND(AVG(salary),2) AS average
+FROM employees
+GROUP BY job_id;
+
+-- 2. 부서별 사원의 수를 출력하세요.
+SELECT department_id, COUNT(*)
+FROM employees
+GROUP BY department_id;
+
+-- 3. 부서별, 직무별 사원의 수를 각각 출력하세요.
+SELECT department_id, job_id, COUNT(*)
+FROM employees
+GROUP BY department_id, job_id;
+
+-- 4. 부서별 급여 표준편차를 출력하세요.
+SELECT department_id, ROUND(STDDEV(salary), 2) AS 급여_표준편차
+FROM employees
+GROUP BY department_id
+ORDER BY 2; -- 부서번호 40, 70, 10직원은 혼자라서 표준편차가 없다
+
+-- 5. 사원의 수가 4명이상인 부서의 아이디와 사원의 수를 출력하세요.
+SELECT department_id, COUNT(*) AS 사원의_수
+FROM employees
+GROUP BY department_id
+HAVING COUNT(*) > 4;
+
+-- 6. 50번부서의 직무별 사원의 수를 출력하세요.
+SELECT job_id, COUNT(*)
+FROM employees
+WHERE department_id = 50
+GROUP BY job_id;
+
+-- 7. 50번 부서에서 직무별 사원의 수가 10명이하인 직무아이디와 사원의 수를 출력하세요.
+SELECT job_id, COUNT(*)
+FROM employees
+WHERE department_id = 50
+GROUP BY job_id
+HAVING COUNT(*) <= 10;
+
+-- 8. 사원목록 중 입사년도 별로 사원들의 급여 평균과 사원수를 출력하세요. 조건1) 입사년도가 빠른 순으로 정렬하세요.
+SELECT TO_CHAR(hire_date, 'RRRR') AS 입사년도, ROUND(AVG(salary), 0) AS 급여평균, COUNT(*) AS 사원수
+FROM employees
+GROUP BY TO_CHAR(hire_date, 'RRRR')
+ORDER BY 입사년도;
+
+-- 9. 사원목록 중 입사년도와 입사월 별로 사원들의 급여 평균과 사원수를 출력하세요. 
+-- 조건1) 입사년도가 빠른 순으로 정렬한 이후, 입사년도가 같다면 입사월을 기준으로 정렬하세요. 
+-- 조건2) 입사년도를 기준으로 급여평균과 사원수의 총 합계를 구하세요.
+SELECT 
+            TO_CHAR(hire_date, 'RRRR') AS 입사년도,
+            TO_CHAR(hire_date, 'MM') AS 입사월,
+            ROUND(AVG(salary), 0), COUNT(*)
+FROM employees
+GROUP BY ROLLUP(TO_CHAR(hire_date, 'RRRR'), TO_CHAR(hire_date, 'MM'))
+ORDER BY 1;
+
+-- 10. 사원목록 중 입사년도와 입사월 별로 사원들의 급여 평균과 사원수를 출력하세요. 
+-- 조건1) 입사년도가 빠른 순으로 정렬한 이후, 입사년도가 같다면 입사월을 기준으로 정렬하세요.
+-- 조건2) 입사년도와 입사월을 기준으로 급여평균과 사원수의 총 합계를 구하세요. 단, 입사년도의 합계는 ‘합계’, 입사월의 합계는 ‘합계’, 입사월의 전체 합계는 ‘합계’로 출력하세요.
+SELECT 
+            DECODE(GROUPING(TO_CHAR(hire_date, 'RRRR')),
+                            1, '합계',
+                            TO_CHAR(hire_date, 'RRRR')) AS 입사년도,
+            DECODE(GROUPING(TO_CHAR(hire_date, 'RRRR')),
+                                                TO_CHAR(hire_date, 'MM'),
+                            1, '소계',
+                            3, '합계',
+                            TO_CHAR(hire_date, 'MM')) AS 입사월,
+            ROUND(AVG(salary), 0), COUNT(*)
+FROM employees
+GROUP BY CUBE(TO_CHAR(hire_date, 'RRRR'), TO_CHAR(hire_date, 'MM'))
+ORDER BY 입사년도, 입사월;
+
+
+-- 11. 사원목록 중 입사년도와 입사월 별로 사원들의 급여 평균과 사원수를 출력하세요. 
+-- 조건1) 입사년도가 빠른 순으로 정렬한 이후, 입사년도가 같다면 입사월을 기준으로 정렬하세요. 
+-- 조건2) 입사년도와 입사월을 기준으로 급여평균과 사원수의 총 합계를 구하세요. 단, 입사년도의 합계는 ‘소계’, 입사월의 합계는 ‘합계’로 출력하세요. 
+-- 조건3) 2개 이상의 열에 대한 집계를 확인하는 GROUPING_ID 값을 출력하세요. 이 열의 이름은 ‘GID’입니다.
+-- 오왕 너무 어렵다
+SELECT	
+ 		NVL(TO_CHAR(hire_date,	'RRRR'),	
+ 						DECODE(GROUPING(TO_CHAR(hire_date,	'RRRR')),	1,	'합계'))
+ 				AS	입사년도,
+ 		NVL(TO_CHAR(hire_date,	'MM'),	
+ 						DECODE(GROUPING(TO_CHAR(hire_date,	'MM')),	1,	'소계'))	
+ 				AS	입사월,
+ 		GROUPING_ID(TO_CHAR(hire_date,	'RRRR'),TO_CHAR(hire_date,	'MM'))	
+ 				AS	GID,
+ 		ROUND(AVG(salary),0)	AS	급여평균,
+ 		COUNT(*)	AS	사원수
+FROM	employees
+GROUP	BY	
+ 		CUBE(TO_CHAR(hire_date,	'RRRR'),	TO_CHAR(hire_date,	'MM'))
+ORDER	BY	입사년도,	입사월;
