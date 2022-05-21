@@ -1,0 +1,212 @@
+---------------5장: 분석함수--------------
+-- 1.1 순위구하기: rank(), dense_rank(), row_number()
+-- 급여가 큰 사원부터 이름과 급여, 순위 출력
+SELECT first_name ||' '|| last_name AS name, salary,
+            RANK()  OVER(ORDER BY salary DESC) sal_rank, -- 중복순위 계산
+            DENSE_RANK()    OVER(ORDER BY salary DESC) dense_sal_rank, -- 중복순위 계산x
+            ROW_NUMBER()    OVER(ORDER BY salary DESC) sal_number -- 모든 행의 번호를 제공
+FROM employees;
+
+-- 1.2 가상순위와 분포: CUME_DIST, PERCENT_RANK
+-- 모든 사원의 아이디와 부서번호, 급여정보 출력--> 급여의 크기순으로 정렬. 급여의 상대적인 위치와 백분율 순위 출력
+SELECT employee_id, department_id, salary,
+    ROUND(CUME_DIST()     OVER(ORDER BY salary DESC), 4) sal_cume_dist,
+    ROUND(PERCENT_RANK()  OVER(ORDER BY salary DESC), 4) sal_pct_rank
+FROM employees;
+    
+-- 1.3 비율함수: RATIO_TO_REPORT
+-- IT_PROG인 사람들 중 본인이 부서의 전체 급여에서 차지하는 비율 계산
+SELECT first_name ||' '|| last_name AS name, salary,
+    ROUND(RATIO_TO_REPORT(salary) OVER (), 4) AS salary_ratio
+FROM employees
+WHERE job_id = 'IT_PROG';
+
+-- 1.4 분배함수: NTILE
+-- 부서번호 50인 사람들 10개 구간으로 나누기
+SELECT first_name ||' '|| last_name AS name, department_id, salary,
+    NTILE(10)   OVER(ORDER BY salary DESC) sal_quart_tile
+FROM employees
+WHERE department_id = 50;
+
+-- 1.5 LAG. LEAD함수
+-- 윈도우의 이전(lag), 이후(lead) n번째 행의 값을 가져오기
+-- 모든 사원의 정보 출력, 단 본인 급여 순위의 한단계 이전 순위급여와 한 단계 이후 순위 급여를 함께 출력
+SELECT employee_id, first_name,
+    LAG(salary, 1, 0)   OVER(ORDER BY salary) AS lower_sal,
+    salary,
+    LEAD(salary, 1, 0) OVER(ORDER BY salary) AS higher_sal
+FROM employees
+ORDER BY salary;
+
+-- 1.6 LISTAGG
+-- 함수의 표현식을 delimiter로 연결해서 여러 행을 하나의 행으로 변환해 출력하는 함수
+-- 같은 부서에 근무하는 사원들 리스트 형식으로 출력
+SELECT department_id,
+    LISTAGG(first_name || ' ' || last_name, ',') WITHIN GROUP(ORDER BY hire_date) as names
+FROM employees
+GROUP BY department_id;
+
+---2. 윈도우절: 파티션으로 분할된 그룹에 대해 다시 그룹을 만드는 역할을 함.
+-- 2.1 FIRST_VALUE, LAST_VALUE
+SELECT	employee_id,
+ 		FIRST_VALUE(salary)	--현재의 값보다 적은 값 또는 직전 값
+ 				OVER	(ORDER	BY	salary	
+ 						ROWS	BETWEEN	1	PRECEDING	AND	1	FOLLOWING)	AS	lower_sal,
+ 		salary	AS	my_sal,
+ 		LAST_VALUE(salary)	-- 현재의 값보다 큰 값 또는 직전값
+ 				OVER	(ORDER	BY	salary	
+ 						ROWS	BETWEEN	1	PRECEDING	AND	1	FOLLOWING)	AS	higher_sal
+FROM			employees;
+
+-- 3. 선형회귀함수: 집계합수와 분석함수로 이용
+--3.1 REGR_AVGX(y, x), REGR_AVGY(y, x)
+-- salary를 독립변수로 두고 commission_pct를 종속변수로 두었을 때 모든 사원 급여의 평균과 보너스를 받는 사람의 급여 평균을 계산
+SELECT AVG(salary), REGR_AVGX(commission_pct, salary)-- 커미션값이 null이 아닌 사원들의 정보만을 계산하므로
+FROM employees;
+
+SELECT AVG(salary)
+FROM employees
+WHERE commission_pct IS NOT NULL;
+
+--3.2 REGR_COUNT(y, x): 두 인수의 값이 NOT NULL인 쌍의 수를 계산
+-- MANAGER_ID와 department_id모두 null이 아닌 행의 수
+SELECT DISTINCT department_id, REGR_COUNT(manager_id, department_id)    OVER(PARTITION BY department_id) "REGR_COUNT"
+FROM employees
+ORDER BY department_id;
+
+-- null값을 제거했기 때문에 일반적인 group by문과 집계 수가 다르다
+SELECT department_id, COUNT(*)
+FROM employees
+GROUP BY department_id
+ORDER BY department_id;
+
+-- 3.3 REGR_SLOPE(y, x), REGR_INTERCEPT(y, x)
+-- 직선의 기울기와 y절편
+-- 세일즈 부서에 해당하는 사원들의 근무일에 따른 급여의 직무별 기울기와 편향 출력
+SELECT job_id, employee_id, salary, ROUND((SYSDATE - hire_date), 2) AS working_day,
+    ROUND(REGR_SLOPE(salary, SYSDATE - hire_date)   OVER(PARTITION BY job_id), 2) "REGR_SLOPE",
+    ROUND(REGR_INTERCEPT(salary, SYSDATE - hire_date) OVER(PARTITION BY job_id), 2)   "REGR_INTERCEPT"
+FROM employees
+WHERE department_id = 80
+ORDER BY job_id, employee_id;
+
+-- REGR_R2(y, x)
+--회귀 분석에 대한 결정계수 반환
+
+SELECT job_id,
+    ROUND(REGR_SLOPE(salary, SYSDATE - hire_date)   OVER(PARTITION BY job_id), 2) "REGR_SLOPE",
+    ROUND(REGR_INTERCEPT(salary, SYSDATE - hire_date) OVER(PARTITION BY job_id), 2)   "REGR_INTERCEPT",
+    ROUND(REGR_R2(salary, SYSDATE - hire_date)    OVER(PARTITION BY job_id), 2) "REGR_R2"
+FROM employees
+WHERE department_id = 80;
+-- SA_MAN의 회귀모형이 SA_REP보다 결정계수가 높으므로 더 유용성이 높다고 할 수 있다.
+
+-- 4. 피벗테이블
+-- 관계형데이터베이스형식: 필요한 정보는 모두 들어가있지만 읽기 어렵다
+CREATE	TABLE			sales_data(
+ 		employee_id		NUMBER(6),
+ 		week_id			NUMBER(2),
+ 		week_day			VARCHAR2(10),
+ 		sales					NUMBER(8,2)
+ );
+INSERT	INTO	sales_data	    values(1101,	4,	'SALES_MON',	100);
+INSERT	INTO	sales_data	    values(1101,	4,	'SALES_TUE',	150);
+INSERT	INTO	sales_data	    values(1101,	4,	'SALES_WED',	80);
+INSERT	INTO	sales_data	    values(1101,	4,	'SALES_THU',	60);
+INSERT	INTO	sales_data	    values(1101,	4,	'SALES_FRI',	120);
+INSERT	INTO	sales_data	    values(1102,	5,	'SALES_MON',	300);
+INSERT	INTO	sales_data	    values(1102,	5,	'SALES_TUE',	300);
+INSERT	INTO	sales_data	    values(1102,	5,	'SALES_WED',	230);
+INSERT	INTO	sales_data	    values(1102,	5,	'SALES_THU',	120);
+INSERT	INTO	sales_data	    values(1102,	5,	'SALES_FRI',	150);
+COMMIT;
+SELECT	*	FROM	sales_data;
+
+ -- 스프레드시트형식: 알아보기는 편하지만 분석하기 어렵다
+
+CREATE	TABLE	sales(
+ 		employee_id		    NUMBER(6),
+ 		week_id				NUMBER(2),
+ 		sales_mon			NUMBER(8,2),
+ 		sales_tue				NUMBER(8,2),
+ 		sales_wed				NUMBER(8,2),
+ 		sales_thu				NUMBER(8,2),
+ 		sales_fri				NUMBER(8,2)
+ );
+INSERT	INTO	sales	VALUES(1101,	 4, 100, 150, 80, 60, 120);
+INSERT	INTO	sales	VALUES(1102,	5,	300,	300,	230,	120,	150);
+COMMIT;
+SELECT	*	FROM	sales;
+ 
+ -- 4.2 PIVOT
+ -- 관계형 데이터베이스 형식의 데이터를 스프레드스타일로 변환
+ SELECT *
+ FROM sales_data
+ PIVOT(
+    SUM(sales)
+    FOR week_day IN('SALES_MON' AS sales_mon,
+                                'SALES_TUE' AS sales_tue,
+                                'SALES_WED' AS sales_wed,
+                                'SALES_THU' AS sales_thu,
+                                'SALES_FRI' AS sales_fri)
+ )
+ ORDER BY employee_id, week_id;
+ 
+ -- 4.3 UNPIVOT
+ -- 스프레드시트형 데이터를 관계형데이터베이스 형식의 데이터로 변환
+ SELECT employee_id, week_id, week_day, sales
+ FROM sales
+ UNPIVOT(
+        sales
+        FOR week_day
+        IN(sales_mon, sales_tue, sales_wed, sales_thu, sales_fri)
+);
+ 
+ 
+--------------------------### 응용문제 ###-------------------------------
+
+-- 1. 모든 사원의 부서번호, 이름, 급여, 부서별 급여 순위를 출력하세요. 중복순위 사원이 있으면 차순위는 없습니다. 이 결과에 이전 순위 사원의 급여를 추가하여 출력하세요.
+SELECT department_id, first_name, salary,
+            RANK() OVER(PARTITION BY department_id
+                                    ORDER BY salary DESC) AS sal_rank, -- 부서번호 별 급여순위
+            LAG(salary, 1, 0) OVER (PARTITION BY department_id
+                                                    ORDER BY salary DESC) AS prev_salary, 
+            FIRST_VALUE(salary) OVER(PARTITION BY department_id
+                                                        ORDER BY salary DESC
+                                                        ROWS 1 PRECEDING) AS prev_salary2 -- 이전순위 사원의 급여
+FROM employees
+ORDER BY department_id;
+
+-- 2. 170번 사원의 사원번호 직전 사원의 이름을 출력하세요.
+
+SELECT LAG(first_name, 1, 0) OVER (ORDER BY first_name) AS first_name
+FROM employees
+WHERE employee_id = 170;
+ 
+ -- 답 --
+SELECT first_name
+FROM employees
+WHERE employee_id = (
+                SELECT before_id
+                FROM 
+                            (SELECT employee_id, LAG(employee_id, 1, 0) OVER (ORDER BY employee_id) AS before_id
+                                FROM employees)
+                WHERE employee_id  = 170
+                );
+                
+
+      
+-- 3.  모든 사원의 급여 정보를 출력하세요. 출력할 때 각 사원이 근무하는 부서의 가장 적은 급여, 그리고 가장 큰 급여, 그리고 부서에서 급여가 가장 많은 사원과의 급여 차이를 출력하세요.
+
+SELECT employee_id, department_id,
+            FIRST_VALUE(salary) OVER(PARTITION BY department_id -- FIRST_VALUE: 현재의 값보다 적은 값 또는 직전 값
+                                                            ORDER BY salary
+                                                            ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS lower_sal,
+            LAST_VALUE(salary) OVER(PARTITION BY department_id
+                                                        ORDER BY salary
+                                                        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS higher_sal,
+            LAST_VALUE(salary) OVER(PARTITION BY department_id -- LAST_VALUE: 현재의 값보다 큰 값 또는 다음 값
+                                                        ORDER BY salary
+                                                        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) - salary AS diff_sal
+FROM employees;
+
